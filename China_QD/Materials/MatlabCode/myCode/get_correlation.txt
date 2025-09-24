@@ -1,0 +1,83 @@
+function [get_cor, times, CoinCounts]=get_correlation(ch1,ch2,nm_of_points,rep_time,end_coef)
+max_ch1=ch1(end); max_ch2=ch2(end);
+min_ch1=ch1(1); min_ch2=ch2(1);
+experiment_time=max([max_ch1 max_ch2])-min([min_ch1 min_ch2]);
+num_ch1=numel(ch1); num_ch2=numel(ch2);
+bin_list_n=[1:1000 fix(logspace(3,log10(end_coef*experiment_time/rep_time),nm_of_points))];
+
+even_num=find(mod(bin_list_n,2)==0&bin_list_n>1000);
+
+bin_list_n(even_num)=bin_list_n(even_num)+1;
+
+bin_list=unique(bin_list_n);
+num_of_points=numel(bin_list);
+bin_times=bin_list*rep_time;
+
+points_between=.5*(bin_times(1:end-1)+bin_times(2:end));
+left_points=[0.5*rep_time, points_between];
+right_points=[points_between, bin_times(end)];
+
+g2=zeros(1,num_of_points);
+start_point=ones(1,num_of_points);
+st=num_ch1*ones(1,num_of_points);
+cc=g2;
+for ii=1:num_ch1
+    ii_time=ch1(ii);
+    ii/num_ch1*100
+    for m=1:num_of_points
+        if ii_time+left_points(m)>max_ch2
+            cc(m)=cc(m)+1;
+            if cc(m)==1
+                st(m)=ii-1;
+            end
+            break
+        end
+        if ii==1
+            if m>1
+                j_min(m)=j_min(m-1);
+                j_max(m)=j_max(m-1);
+            else
+                j_min(m)=1;
+                j_max(m)=1;
+            end
+        end
+        for jj=j_min(m):num_ch2
+            if ii==1
+                if ch2(jj)-min([min_ch1 min_ch2])<left_points(m)
+                    start_point(m)=jj;
+                end
+            end
+            if jj~=1
+                if ch2(jj-1)<ii_time+left_points(m) && ch2(jj)>ii_time+left_points(m)
+                    j_min(m)=jj;
+                    break
+                end
+            else
+                if  ch2(jj)>ii_time+left_points(m)
+                    j_min(m)=jj;
+                    break
+                end
+            end
+        end
+        for jj=j_max(m):num_ch2
+            if jj~=1
+                if ch2(jj-1)<ii_time+right_points(m) && ch2(jj)>ii_time+right_points(m)
+                    j_max(m)=jj;
+                    break
+                end
+            else
+                if ch2(jj)>ii_time+right_points(m)
+                    j_max(m)=jj;
+                    break
+                end
+            end
+        end
+        g2(m)=g2(m)+(j_max(m)-j_min(m));
+    end
+end
+% get_cor=g2/num_ch1*experiment_time./(right_points-left_points)./(num_ch2-start_point);
+% Norm_coef=1./(1./st*experiment_time./(right_points-left_points)./num_ch2);
+CoinCounts=g2;
+get_cor=g2./st*experiment_time./(right_points-left_points)./num_ch2;
+% get_cor=g2./num_ch1*experiment_time^2./(right_points-left_points)/num_ch2./(experiment_time-bin_times);
+times=bin_times;

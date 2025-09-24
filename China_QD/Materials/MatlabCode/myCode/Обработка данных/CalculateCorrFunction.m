@@ -1,0 +1,165 @@
+function [] = CalculateCorrFunction(QD_num, QD_size, dir_name)
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Подпрограмма для расчета g^2. На выходе получаем структуру из трех полей:
+% g2 - корреляционная функция, times - времена, CoinCount - ненормированная
+% корреляционная функция. 
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+% Загрузка данных
+load(['results/' dir_name 'QD_' QD_num '_' QD_size ...
+        'nm/data_files/QD_' QD_num '_' QD_size '_nm_parsed_data']);
+load(['results/' dir_name 'QD_' QD_num '_' QD_size ...
+        'nm/data_files/QD_' QD_num '_' QD_size '_nm_binned_data']);
+
+% Распаковка структур
+arrivals  = parsed_data.arrivals * 1e-12; % В секундах
+delays    = parsed_data.delays * 1e-12;
+channel   = parsed_data.channel;
+intensity = binned_data.intensity;
+
+% 1 и 2 каналы
+ch1 = arrivals(find(channel == 0));
+ch2 = arrivals(find(channel == 1));
+
+%%%%%%%%%%%%%%%%%%%%%%%
+% Параметры для расчета корр функции 
+nums_of_points = 10;   % Количество точек для расчета
+time_beetwen   = max(delays);   % Время между импульсами
+end_coef       = 0.75;   % Конечная точка для расчета
+%%%%%%%%%%%%%%%%%%%%%%%
+
+[g2, times, CoinCounts] = get_correlation(ch1, ch2, nums_of_points, time_beetwen, end_coef);
+
+% Непосредственно, расчетBtwen, points_between];
+% right_points   = [points_between, bin_times(end)];
+% 
+% g2          = zeros(1, nums_of_points);
+% CC          = g2;
+% start_point = ones(1, nums_of_points);
+% st          = start_point;
+% j_min       = zeros(1, nums_of_points);
+% j_max       = j_min;
+% 
+% for ii = 1:nums_of_ch1
+%     ii_time = ch1(ii);
+%     ii/nums_of_ch1*100
+%     for mm = 1:nums_of_points
+%         if ii_time + left_points(mm) > max_ch2
+%             CC(mm) = CC(mm) + 1;
+%             if CC(mm) == 1
+%                 st(mm) = ii;
+%             end
+%             break
+%         end
+% 
+%         if ii == 1
+%             j_min(mm) = 1;
+%             j_max(mm) = 1;
+%         end
+% 
+%         for jj = j_min(mm):nums_of_ch2
+%             if ii == 1
+%                 if ch2(jj) - arrivals(1) < left_points(mm)
+%                     start_point(mm) = jj;
+%                 end
+%             end
+% 
+%             if jj ~= 1
+%                 if ch2(jj-1) < ii_time + left_points(mm) && ...
+%                         ch2(jj) > ii_time + left_points(mm)
+%                     j_min(mm) = jj;
+%                     break
+%                 end
+%             else
+%                 if ch2(jj) > ii_time + left_points(mm)
+%                     j_min(mm) = jj;
+%                     break
+%                 end
+%             end
+%         end
+% 
+%         for jj = j_max(mm):nums_of_ch2
+%             if jj ~= 1
+%                 if ch2(jj-1) < ii_time + right_points(mm) && ...
+%                         ch2(jj) > ii_time + right_points(mm)
+%                     j_max(mm) = jj;
+%                     break
+%                 end
+%             else
+%                 if ch2(jj) > ii_time + right_points(mm)
+%                     j_max(mm) = jj;
+%                     break
+%                 end
+%             end
+%             g2(mm) = g2(mm) + (j_max(mm) - j_min(mm));
+%         end
+%     end
+% end
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+% CoinCounts = g2;
+% g2 = g2 ./ st * experiment_time ./ (right_points - left_points) ./ nums_of_ch2;
+% times = bin_times;
+
+t = transpose(times);
+p = transpose(g2) - 1;
+
+experiment_time = max([ch1(end) ch2(end)]) - min([ch1(1) ch2(1)]);
+
+[Y_exp, X_exp] = hist(intensity, min(intensity) : max(intensity));
+Y_exp = Y_exp / sum(Y_exp);
+N_med = Y_exp * X_exp';
+
+new_bins = [ ...
+    logspace(-(5-1/2), -4, 2), ...
+    logspace(-(4-1/2), -3, 2), ...
+    logspace(-(3-1/3), -2, 3), ...
+    logspace(-(2-1/3), -1, 3), ...
+    logspace(-(1-1/5),  0, 5), ...
+    logspace((0+1/10),  1, 10), ...
+    logspace((1+1/15),  2, 10), ...
+    logspace((2+1/10),  log10(max(t)), 10) ...
+];
+num_new_bins = numel(new_bins);
+
+new_p = new_bins * 0;
+new_t = new_p;
+
+idx_photons_in_bins = (t <= new_bins(1)) & (t > 0);
+
+new_p(1) = mean(p(idx_photons_in_bins));
+new_t(1) = mean(t(idx_photons_in_bins));
+
+for ii = 2: num_new_bins
+    idx_photons_in_bins = (t <= new_bins(ii)) & (t > new_bins(ii-1));
+    new_p(ii) = mean(p(idx_photons_in_bins));
+    new_t(ii) = mean(t(idx_photons_in_bins));
+end
+
+new_delta_t = diff([0 new_t]);
+n_m = numel(ch2) / experiment_time;
+new_N_kor = (new_p+1).*new_delta_t*n_m^2*experiment_time;
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Сохранение структур
+corr_data = struct('g2', g2, ...
+                   'times', times, ...
+                   'CoinCounts', CoinCounts, ...
+                   'new_t', new_t, ...
+                   'new_p', new_p, ...
+                   'new_N_kor', new_N_kor, ...
+                   'n_m', n_m, ...
+                   'new_delta_t', new_delta_t, ...
+                   'experiment_time', experiment_time, ...
+                   'N_med', N_med, ...
+                   'p_00', g2(1) - 1, ...
+                   'err_00', (g2(1) - 1) / sqrt(CoinCounts(1)), ...
+                   'nums_of_ch2', numel(ch2) ...
+                   );
+save(['results/' dir_name ...
+        'QD_' QD_num '_' QD_size ...
+        'nm/data_files/QD_' QD_num '_' ...
+        QD_size '_nm_corr_data'], 'corr_data');
+
+end
